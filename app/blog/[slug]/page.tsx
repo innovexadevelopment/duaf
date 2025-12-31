@@ -1,147 +1,187 @@
-import { Metadata } from 'next'
-import { notFound } from 'next/navigation'
-import { supabase, getPublicUrl } from '@/app/lib/supabaseClient'
-import { BlogPost } from '@/app/lib/types'
-import AnimatedFadeIn from '@/app/components/AnimatedFadeIn'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
+import { Navigation } from '../../../components/navigation'
+import { Footer } from '../../../components/footer'
 import Link from 'next/link'
-import { ArrowLeft, Calendar, User } from 'lucide-react'
+import { ArrowLeft, Calendar, Tag, Share2 } from 'lucide-react'
+import { supabase } from '../../../lib/supabase/client'
+import type { BlogPost, Media } from '../../../lib/types'
 
-interface PageProps {
-  params: Promise<{ slug: string }>
-}
+export default function BlogPostPage() {
+  const params = useParams()
+  const slug = params.slug as string
+  const [post, setPost] = useState<BlogPost | null>(null)
+  const [featuredImage, setFeaturedImage] = useState<Media | null>(null)
+  const [relatedPosts, setRelatedPosts] = useState<BlogPost[]>([])
 
-async function getBlogPost(slug: string): Promise<BlogPost | null> {
-  const { data } = await supabase
-    .from('blog_posts')
-    .select('*')
-    .eq('site', 'ngo')
-    .eq('slug', slug)
-    .eq('is_published', true)
-    .single()
-
-  return data
-}
-
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const resolvedParams = await params
-  const post = await getBlogPost(resolvedParams.slug)
-
-  if (!post) {
-    return {
-      title: 'Post Not Found',
+  useEffect(() => {
+    if (slug) {
+      loadPost()
     }
-  }
+  }, [slug])
 
-  return {
-    title: `${post.title} - DUAF Blog`,
-    description: post.excerpt || post.title,
-  }
-}
+  async function loadPost() {
+    const { data: postData } = await supabase
+      .from('ngo_blogs')
+      .select('*')
+      .eq('slug', slug)
+      .eq('status', 'published')
+      .single()
 
-export default async function BlogPostPage({ params }: PageProps) {
-  const resolvedParams = await params
-  const post = await getBlogPost(resolvedParams.slug)
+    if (!postData) return
+
+    setPost(postData)
+
+    // Increment view count
+    await supabase
+      .from('ngo_blogs')
+      .update({ view_count: (postData.view_count || 0) + 1 })
+      .eq('id', postData.id)
+
+    // Load featured image
+    if (postData.featured_image_id) {
+      const { data: imageData } = await supabase
+        .from('ngo_media')
+        .select('*')
+        .eq('id', postData.featured_image_id)
+        .single()
+
+      if (imageData) setFeaturedImage(imageData)
+    }
+
+    // Load related posts
+    const { data: relatedData } = await supabase
+      .from('ngo_blogs')
+      .select('*')
+      .eq('status', 'published')
+      .eq('category', postData.category)
+      .neq('id', postData.id)
+      .limit(3)
+
+    if (relatedData) setRelatedPosts(relatedData)
+  }
 
   if (!post) {
-    notFound()
+    return (
+      <div className="min-h-screen">
+        <Navigation />
+        <main className="pt-16">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <p>Post not found.</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
   }
 
   return (
-    <div className="pt-20">
-      {/* Hero Image */}
-      {post.featured_image_path && (
-        <div className="relative h-[50vh] min-h-[400px]">
-          <img
-            src={getPublicUrl(post.featured_image_path)}
-            alt={post.title}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 container-padding pb-12">
-            <div className="max-w-4xl mx-auto">
-              <Link href="/blog" className="inline-flex items-center gap-2 text-white mb-4 hover:text-primary transition-colors">
-                <ArrowLeft className="h-4 w-4" />
-                Back to Blog
-              </Link>
-              <h1 className="heading-1 text-white mb-4">{post.title}</h1>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Content */}
-      <section className="section-padding container-padding">
-        <div className="max-w-4xl mx-auto">
-          {!post.featured_image_path && (
-            <div className="mb-8">
-              <Link href="/blog" className="inline-flex items-center gap-2 text-primary mb-4 hover:text-primary-dark transition-colors">
-                <ArrowLeft className="h-4 w-4" />
-                Back to Blog
-              </Link>
-              <h1 className="heading-1 mb-4">{post.title}</h1>
+    <div className="min-h-screen">
+      <Navigation />
+      <main className="pt-16">
+        {/* Hero */}
+        <section className="relative bg-gradient-to-br from-green-500 to-green-700 text-white py-20">
+          {featuredImage && (
+            <div className="absolute inset-0 opacity-20">
+              <img src={featuredImage.file_url} alt="" className="w-full h-full object-cover" />
             </div>
           )}
-
-          {/* Meta Info */}
-          <AnimatedFadeIn>
-            <div className="flex flex-wrap items-center gap-6 mb-8 pb-8 border-b border-gray-200">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <Link
+              href="/blog"
+              className="inline-flex items-center text-green-100 hover:text-white mb-4"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Blog
+            </Link>
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">{post.title}</h1>
+            <div className="flex flex-wrap items-center gap-4 text-green-100">
               {post.published_at && (
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Calendar className="h-4 w-4" />
-                  <span>
-                    {new Date(post.published_at).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </span>
-                </div>
-              )}
-              {post.author_name && (
-                <div className="flex items-center gap-2 text-gray-600">
-                  <User className="h-4 w-4" />
-                  <span>{post.author_name}</span>
+                <div className="flex items-center">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  {new Date(post.published_at).toLocaleDateString()}
                 </div>
               )}
               {post.category && (
-                <span className="px-3 py-1 bg-primary/10 text-primary text-sm font-semibold rounded-full">
+                <div className="flex items-center">
+                  <Tag className="h-4 w-4 mr-2" />
                   {post.category}
-                </span>
+                </div>
               )}
             </div>
-          </AnimatedFadeIn>
+          </div>
+        </section>
 
-          {/* Content */}
-          <AnimatedFadeIn delay={0.1}>
-            <div className="prose prose-lg max-w-none">
-              {post.excerpt && (
-                <p className="text-xl text-gray-700 font-medium mb-6">{post.excerpt}</p>
+        {/* Content */}
+        <section className="py-12 bg-white">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="max-w-4xl mx-auto">
+              {featuredImage && (
+                <img
+                  src={featuredImage.file_url}
+                  alt={featuredImage.alt_text || post.title}
+                  className="w-full rounded-lg mb-8"
+                />
               )}
-              <div className="text-gray-700 whitespace-pre-line leading-relaxed">
-                {post.content}
-              </div>
-            </div>
-          </AnimatedFadeIn>
 
-          {/* Tags */}
-          {post.tags && post.tags.length > 0 && (
-            <AnimatedFadeIn delay={0.2}>
-              <div className="mt-12 pt-8 border-t border-gray-200">
-                <div className="flex flex-wrap gap-2">
-                  {post.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-full"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
+              <div
+                className="prose prose-lg max-w-none mb-8"
+                dangerouslySetInnerHTML={{ __html: post.content }}
+              />
+
+              {/* Share */}
+              <div className="border-t pt-8 mt-8">
+                <h3 className="text-lg font-semibold mb-4">Share this post</h3>
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => {
+                      if (navigator.share) {
+                        navigator.share({
+                          title: post.title,
+                          url: window.location.href,
+                        })
+                      }
+                    }}
+                    className="flex items-center text-green-600 hover:text-green-700"
+                  >
+                    <Share2 className="h-5 w-5 mr-2" />
+                    Share
+                  </button>
                 </div>
               </div>
-            </AnimatedFadeIn>
-          )}
-        </div>
-      </section>
+            </div>
+          </div>
+        </section>
+
+        {/* Related Posts */}
+        {relatedPosts.length > 0 && (
+          <section className="py-12 bg-gray-50">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+              <h2 className="text-3xl font-bold mb-8">Related Posts</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {relatedPosts.map((related) => (
+                  <Link
+                    key={related.id}
+                    href={`/blog/${related.slug}`}
+                    className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow"
+                  >
+                    <div className="h-48 bg-gradient-to-br from-green-400 to-green-600"></div>
+                    <div className="p-6">
+                      <h3 className="text-xl font-semibold mb-2">{related.title}</h3>
+                      {related.excerpt && (
+                        <p className="text-gray-600 line-clamp-2">{related.excerpt}</p>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
+      <Footer />
     </div>
   )
 }

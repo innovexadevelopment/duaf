@@ -1,28 +1,30 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Navigation } from '../../components/navigation'
-import { Footer } from '../../components/footer'
-import { supabase } from '../../lib/supabase/client'
-import type { Page, Section, ContentBlock, Media, TeamMember } from '../../lib/types'
+import { useParams } from 'next/navigation'
+import { Navigation } from '../../../components/navigation'
+import { Footer } from '../../../components/footer'
+import { supabase } from '../../../lib/supabase/client'
+import type { Page, Section, ContentBlock } from '../../../lib/types'
 
-export default function AboutPage() {
+export default function LegalPage() {
+  const params = useParams()
+  const slug = params.slug as string
   const [page, setPage] = useState<Page | null>(null)
   const [sections, setSections] = useState<Section[]>([])
   const [blocks, setBlocks] = useState<Record<string, ContentBlock[]>>({})
-  const [media, setMedia] = useState<Record<string, Media>>({})
-  const [team, setTeam] = useState<TeamMember[]>([])
 
   useEffect(() => {
-    loadPage()
-    loadTeam()
-  }, [])
+    if (slug) {
+      loadPage()
+    }
+  }, [slug])
 
   async function loadPage() {
     const { data: pageData } = await supabase
       .from('ngo_pages')
       .select('*')
-      .eq('slug', 'about')
+      .eq('slug', `legal/${slug}`)
       .eq('status', 'published')
       .single()
 
@@ -59,37 +61,6 @@ export default function AboutPage() {
     }
   }
 
-  async function loadTeam() {
-    const { data } = await supabase
-      .from('ngo_team')
-      .select('*')
-      .eq('is_visible', true)
-      .order('order_index', { ascending: true })
-      .limit(6)
-
-    if (data) {
-      setTeam(data)
-      
-      // Load media for team member photos
-      const photoIds = data
-        .map(member => member.photo_id)
-        .filter(Boolean) as string[]
-      
-      if (photoIds.length > 0) {
-        const { data: mediaData } = await supabase
-          .from('ngo_media')
-          .select('*')
-          .in('id', photoIds)
-        
-        if (mediaData) {
-          const mediaMap: Record<string, Media> = {}
-          mediaData.forEach(m => { mediaMap[m.id] = m })
-          setMedia(prev => ({ ...prev, ...mediaMap }))
-        }
-      }
-    }
-  }
-
   function renderContentBlock(block: ContentBlock) {
     switch (block.type) {
       case 'heading':
@@ -106,26 +77,31 @@ export default function AboutPage() {
             {block.content.text}
           </p>
         )
-      case 'image':
-        const image = block.content.image_id ? media[block.content.image_id] : null
-        return image ? (
-          <img
-            src={image.file_url}
-            alt={image.alt_text || ''}
-            className="w-full rounded-lg mb-4"
-          />
-        ) : null
       default:
         return null
     }
+  }
+
+  if (!page) {
+    return (
+      <div className="min-h-screen">
+        <Navigation />
+        <main className="pt-16">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <p>Page not found.</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen">
       <Navigation />
       <main className="pt-16">
-        {page && (
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="max-w-4xl mx-auto">
             <h1 className="text-4xl md:text-5xl font-bold mb-8 text-gray-900">
               {page.title}
             </h1>
@@ -148,33 +124,8 @@ export default function AboutPage() {
                 ))}
               </section>
             ))}
-
-            {team.length > 0 && (
-              <section className="mt-16">
-                <h2 className="text-3xl font-bold mb-8 text-gray-900">Our Team</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  {team.map((member) => {
-                    const photo = member.photo_id ? media[member.photo_id] : null
-                    return (
-                      <div key={member.id} className="text-center">
-                        {photo && (
-                          <img
-                            src={photo.file_url}
-                            alt={photo.alt_text || member.name}
-                            className="w-32 h-32 rounded-full mx-auto mb-4 object-cover"
-                          />
-                        )}
-                        <h3 className="text-xl font-semibold mb-2">{member.name}</h3>
-                        {member.role && <p className="text-green-600 mb-2">{member.role}</p>}
-                        {member.bio && <p className="text-gray-600 text-sm">{member.bio}</p>}
-                      </div>
-                    )
-                  })}
-                </div>
-              </section>
-            )}
           </div>
-        )}
+        </div>
       </main>
       <Footer />
     </div>

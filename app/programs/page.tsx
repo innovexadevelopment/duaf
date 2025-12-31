@@ -1,98 +1,160 @@
-import { Metadata } from 'next'
-import SectionTitle from '../components/SectionTitle'
-import AnimatedFadeIn from '../components/AnimatedFadeIn'
-import { supabase, getPublicUrl } from '../lib/supabaseClient'
-import { Project } from '../lib/types'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { Navigation } from '../../components/navigation'
+import { Footer } from '../../components/footer'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
+import { supabase } from '../../lib/supabase/client'
+import type { Program, Media } from '../../lib/types'
 
-export const metadata: Metadata = {
-  title: 'Our Programs - DUAF',
-  description: 'Explore the impactful programs and initiatives we run to create positive change.',
-}
+export default function ProgramsPage() {
+  const [programs, setPrograms] = useState<Program[]>([])
+  const [mediaMap, setMediaMap] = useState<Record<string, Media>>({})
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [categories, setCategories] = useState<string[]>([])
 
-async function getProjects(): Promise<Project[]> {
-  const { data } = await supabase
-    .from('projects')
-    .select('*')
-    .eq('site', 'ngo')
-    .order('created_at', { ascending: false })
+  useEffect(() => {
+    loadPrograms()
+  }, [selectedCategory])
 
-  return data || []
-}
+  async function loadPrograms() {
+    let query = supabase
+      .from('ngo_programs')
+      .select('*')
+      .eq('status', 'published')
+      .order('order_index', { ascending: true })
 
-export default async function ProgramsPage() {
-  const projects = await getProjects()
+    if (selectedCategory !== 'all') {
+      query = query.eq('category', selectedCategory)
+    }
+
+    const { data } = await query
+
+    if (data) {
+      setPrograms(data)
+
+      // Extract unique categories
+      const cats = Array.from(new Set(data.map(p => p.category).filter(Boolean))) as string[]
+      setCategories(cats)
+
+      // Load media
+      const mediaIds = data.map(p => p.featured_image_id).filter(Boolean) as string[]
+      if (mediaIds.length > 0) {
+        const { data: mediaData } = await supabase
+          .from('ngo_media')
+          .select('*')
+          .in('id', mediaIds)
+
+        if (mediaData) {
+          const map: Record<string, Media> = {}
+          mediaData.forEach(m => { map[m.id] = m })
+          setMediaMap(map)
+        }
+      }
+    }
+  }
 
   return (
-    <div className="pt-20">
-      {/* Hero Section */}
-      <section className="section-padding container-padding bg-gradient-to-br from-primary/10 via-secondary/10 to-accent">
-        <div className="max-w-4xl mx-auto text-center">
-          <AnimatedFadeIn>
-            <h1 className="heading-1 mb-6">Our Programs</h1>
-            <p className="text-xl text-gray-700">
-              Discover the impactful initiatives we're running to create positive change in our communities.
+    <div className="min-h-screen">
+      <Navigation />
+      <main className="pt-16">
+        {/* Hero */}
+        <section className="bg-gradient-to-br from-green-500 to-green-700 text-white py-20">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">Our Programs</h1>
+            <p className="text-xl text-green-100 max-w-2xl">
+              Discover how we're making a difference through our various initiatives and programs
             </p>
-          </AnimatedFadeIn>
-        </div>
-      </section>
+          </div>
+        </section>
 
-      {/* Programs Grid */}
-      <section className="section-padding container-padding">
-        <div className="max-w-7xl mx-auto">
-          {projects.length > 0 ? (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {projects.map((project, index) => (
-                <AnimatedFadeIn key={project.id} delay={index * 0.1}>
-                  <Link href={`/programs/${project.slug}`} className="card group hover:shadow-xl transition-all block">
-                    {project.cover_image_path && (
-                      <div className="aspect-video mb-4 rounded-lg overflow-hidden">
+        {/* Filter */}
+        {categories.length > 0 && (
+          <section className="bg-white border-b py-4">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setSelectedCategory('all')}
+                  className={`px-4 py-2 rounded-full transition-colors ${
+                    selectedCategory === 'all'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  All
+                </button>
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-4 py-2 rounded-full transition-colors ${
+                      selectedCategory === cat
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Programs Grid */}
+        <section className="py-20 bg-gray-50">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            {programs.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-gray-600">No programs found.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {programs.map((program) => {
+                  const image = program.featured_image_id ? mediaMap[program.featured_image_id] : null
+                  return (
+                    <div
+                      key={program.id}
+                      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow"
+                    >
+                      {image ? (
                         <img
-                          src={getPublicUrl(project.cover_image_path)}
-                          alt={project.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          src={image.file_url}
+                          alt={image.alt_text || program.title}
+                          className="w-full h-48 object-cover"
                         />
-                      </div>
-                    )}
-                    {project.category && (
-                      <span className="inline-block px-3 py-1 bg-primary/10 text-primary text-sm font-semibold rounded-full mb-3">
-                        {project.category}
-                      </span>
-                    )}
-                    <h3 className="heading-3 mb-2 group-hover:text-primary transition-colors">
-                      {project.title}
-                    </h3>
-                    <p className="text-gray-600 mb-4 line-clamp-3">
-                      {project.short_description}
-                    </p>
-                    {project.start_date && (
-                      <div className="text-sm text-gray-500 mb-4">
-                        {project.is_ongoing ? (
-                          <span>Started {new Date(project.start_date).toLocaleDateString()} • Ongoing</span>
-                        ) : (
-                          <span>
-                            {new Date(project.start_date).toLocaleDateString()}
-                            {project.end_date && ` - ${new Date(project.end_date).toLocaleDateString()}`}
+                      ) : (
+                        <div className="h-48 bg-gradient-to-br from-green-400 to-green-600"></div>
+                      )}
+                      <div className="p-6">
+                        {program.category && (
+                          <span className="text-sm text-green-600 font-semibold">
+                            {program.category}
                           </span>
                         )}
+                        <h3 className="text-xl font-semibold mb-2 text-gray-900 mt-2">
+                          {program.title}
+                        </h3>
+                        {program.description && (
+                          <p className="text-gray-600 mb-4 line-clamp-3">{program.description}</p>
+                        )}
+                        <Link
+                          href={`/programs/${program.slug}`}
+                          className="text-green-600 hover:text-green-700 font-semibold inline-flex items-center"
+                        >
+                          View Program <ArrowRight className="ml-2 h-4 w-4" />
+                        </Link>
                       </div>
-                    )}
-                    <div className="flex items-center text-primary font-semibold group-hover:gap-2 transition-all">
-                      Learn More
-                      <ArrowRight className="h-4 w-4 ml-1" />
                     </div>
-                  </Link>
-                </AnimatedFadeIn>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-16">
-              <p className="text-gray-500 text-lg">No programs available at the moment.</p>
-            </div>
-          )}
-        </div>
-      </section>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+      </main>
+      <Footer />
     </div>
   )
 }

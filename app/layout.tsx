@@ -1,32 +1,28 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import Navbar from "./components/Navbar";
-import Footer from "./components/Footer";
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import SmoothScrollProvider from '../components/smooth-scroll-provider'
 
-// Always fetch fresh data from Supabase (no static caching)
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-export const fetchCache = "force-no-store";
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "DUAF - Making a Difference Together",
-  description: "DUAF is a non-profit organization dedicated to creating positive change in our communities through impactful programs and initiatives.",
-  keywords: "NGO, non-profit, charity, community, humanitarian, volunteer, donate",
-};
+  title: 'DUAF - Making a Difference',
+  description: 'Dedicated to creating positive change and supporting communities in need',
+}
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="en">
-      <body>
-        <Navbar />
-        <main>{children}</main>
-        <Footer />
+      <body className={inter.className}>
+        <SmoothScrollProvider>
+          {children}
+        </SmoothScrollProvider>
       </body>
     </html>
-  );
+  )
 }
 
